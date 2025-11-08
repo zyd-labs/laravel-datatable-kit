@@ -1,0 +1,23 @@
+{
+    "name": "zyd-labs/laravel-datatable-kit",
+    "description": "Reusable DataTable utilities for Laravel projects.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "maatwebsite/excel": "^3.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "ZydLabs\\LaravelDataTableKit\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "ZydLabs\\LaravelDataTableKit\\Providers\\DataTableServiceProvider"
+            ]
+        }
+    }
+}
+
