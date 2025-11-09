@@ -40,9 +40,12 @@ final class Sorter
         }
 
         if ($relation instanceof BelongsTo) {
-            $this->ensureJoinExists($query, $relation);
+            $this->ensureJoinExists($query, $relation, $relationName);
             $relatedTable = $relation->getRelated()->getTable();
-            $query->orderBy("{$relatedTable}.{$column}", $direction);
+            $baseTable = $query->getModel()->getTable();
+            $alias = $relatedTable === $baseTable ? sprintf('%s_%s', $relationName, $relatedTable) : $relatedTable;
+
+            $query->orderBy("{$alias}.{$column}", $direction);
 
             return;
         }

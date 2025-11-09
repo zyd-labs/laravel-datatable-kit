@@ -29,15 +29,13 @@ final class FilterApplier
                 continue;
             }
 
-            if (! str_contains($field, '.')) {
-                continue;
-            }
+            if (str_contains($field, '.')) {
+                [$relationName] = explode('.', $field, 2);
+                $relation = $this->getRelationInstance($query->getModel(), $relationName);
 
-            [$relationName] = explode('.', $field, 2);
-            $relation = $this->getRelationInstance($query->getModel(), $relationName);
-
-            if ($relation instanceof BelongsTo) {
-                $this->ensureJoinExists($query, $relation);
+                if ($relation instanceof BelongsTo) {
+                    $this->ensureJoinExists($query, $relation, $relationName);
+                }
             }
         }
 
@@ -109,7 +107,7 @@ final class FilterApplier
         }
 
         if ($relation instanceof BelongsTo) {
-            $this->applyBelongsToFilter($query, $relation, $column, $matchMode, $value, $method);
+            $this->applyBelongsToFilter($query, $relation, $relationName, $column, $matchMode, $value, $method);
 
             return;
         }
@@ -163,17 +161,24 @@ final class FilterApplier
     private function applyBelongsToFilter(
         Builder $query,
         BelongsTo $relation,
+        string $relationName,
         string $column,
         string $matchMode,
         mixed $value,
         string $method
     ): void {
-        $this->ensureJoinExists($query, $relation);
+        $this->ensureJoinExists($query, $relation, $relationName);
 
         $relatedTable = $relation->getRelated()->getTable();
+        $baseTable = $query->getModel()->getTable();
+        $alias = $relatedTable;
+
+        if ($relatedTable === $baseTable) {
+            $alias = sprintf('%s_%s', $relationName, $relatedTable);
+        }
 
         $query->{$method}(
-            "{$relatedTable}.{$column}",
+            "{$alias}.{$column}",
             $this->getMatchOperator($matchMode),
             $this->getMatchValue($matchMode, $value)
         );

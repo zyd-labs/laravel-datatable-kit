@@ -37,7 +37,7 @@ final class GlobalSearchApplier
             $relation = $this->getRelationInstance($model, $relationName);
 
             if ($relation instanceof BelongsTo) {
-                $this->ensureJoinExists($query, $relation);
+                $this->ensureJoinExists($query, $relation, $relationName);
             }
         }
 
@@ -68,7 +68,10 @@ final class GlobalSearchApplier
         $relatedTable = $relation->getRelated()->getTable();
 
         if ($relation instanceof BelongsTo) {
-            $query->orWhere("{$relatedTable}.{$column}", 'like', "%{$term}%");
+            $baseTable = $model->getTable();
+            $alias = $relatedTable === $baseTable ? sprintf('%s_%s', $relationName, $relatedTable) : $relatedTable;
+
+            $query->orWhere("{$alias}.{$column}", 'like', "%{$term}%");
 
             return;
         }
