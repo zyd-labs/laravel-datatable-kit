@@ -17,6 +17,7 @@ final class DataTableResult
 
     public function toArray(): array
     {
+        // Test
         return [
             'data' => $this->data,
             'total' => $this->total,
