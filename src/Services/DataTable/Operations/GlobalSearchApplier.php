@@ -69,7 +69,7 @@ final class GlobalSearchApplier
 
         if ($relation instanceof BelongsTo) {
             $baseTable = $model->getTable();
-            $alias = $relatedTable === $baseTable ? sprintf('%s_%s', $relationName, $relatedTable) : $relatedTable;
+            $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
 
             $query->orWhere("{$alias}.{$column}", 'like', "%{$term}%");
 

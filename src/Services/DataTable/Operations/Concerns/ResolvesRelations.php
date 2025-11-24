@@ -31,11 +31,7 @@ trait ResolvesRelations
         $baseTable = $query->getModel()->getTable();
 
         $relationName ??= method_exists($relation, 'getRelationName') ? $relation->getRelationName() : null;
-        $alias = $relatedTable;
-
-        if ($relationName !== null && $relatedTable === $baseTable) {
-            $alias = sprintf('%s_%s', $relationName, $relatedTable);
-        }
+        $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
 
         $joins = $query->getQuery()->joins ?? [];
         foreach ($joins as $join) {
@@ -68,6 +64,17 @@ trait ResolvesRelations
         if ($columns === null || $columns === []) {
             $query->select("{$baseTable}.*");
         }
+    }
+
+    protected function getJoinAlias(BelongsTo $relation, ?string $relationName, string $baseTable): string
+    {
+        $relatedTable = $relation->getRelated()->getTable();
+
+        if ($relationName !== null && $relatedTable === $baseTable) {
+            return sprintf('%s_%s', $relationName, $relatedTable);
+        }
+
+        return $relatedTable;
     }
 }
 

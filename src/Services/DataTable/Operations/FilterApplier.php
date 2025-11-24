@@ -55,7 +55,8 @@ final class FilterApplier
                 continue;
             }
 
-            $query->where(function (Builder $nested) use ($field, $constraints, $operator): void {
+            $baseTable = $query->getModel()->getTable();
+            $query->where(function (Builder $nested) use ($field, $constraints, $operator, $baseTable): void {
                 foreach ($constraints as $index => $constraint) {
                     $value = $constraint['value'] ?? null;
                     $matchMode = $constraint['matchMode'] ?? 'contains';
@@ -77,7 +78,8 @@ final class FilterApplier
                         continue;
                     }
 
-                    $this->applyMatchMode($nested, $field, $matchMode, $value, $method);
+                    // Direkt kolonlar için tablo prefix'i ekle (ambiguous hata önlemek için)
+                    $this->applyMatchMode($nested, "{$baseTable}.{$field}", $matchMode, $value, $method);
                 }
             });
         }
@@ -169,13 +171,8 @@ final class FilterApplier
     ): void {
         $this->ensureJoinExists($query, $relation, $relationName);
 
-        $relatedTable = $relation->getRelated()->getTable();
         $baseTable = $query->getModel()->getTable();
-        $alias = $relatedTable;
-
-        if ($relatedTable === $baseTable) {
-            $alias = sprintf('%s_%s', $relationName, $relatedTable);
-        }
+        $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
 
         $query->{$method}(
             "{$alias}.{$column}",
