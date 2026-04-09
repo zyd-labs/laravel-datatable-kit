@@ -297,10 +297,6 @@ final class FilterApplier
                 $query->{$method}($field, 'not like', "%{$value}%");
 
                 return;
-            case 'notContains':
-                $query->{$method}($field, ' not like', "%{$value}%");
-
-                return;
             case 'startsWith':
                 $query->{$method}($field, 'like', "{$value}%");
 
@@ -346,19 +342,19 @@ final class FilterApplier
 
                 return;
             case 'dateIs':
-                $query->{$method}($field, '=', $value);
+                $query->{$method . 'Date'}($field, '=', $value);
 
                 return;
             case 'dateIsNot':
-                $query->{$method}($field, '!=', $value);
+                $query->{$method . 'Date'}($field, '!=', $value);
 
                 return;
             case 'dateBefore':
-                $query->{$method}($field, '<', $value);
+                $query->{$method . 'Date'}($field, '<', $value);
 
                 return;
             case 'dateAfter':
-                $query->{$method}($field, '>', $value);
+                $query->{$method . 'Date'}($field, '>', $value);
 
                 return;
             case 'isNull':
