@@ -24,10 +24,10 @@ final class DataTableServiceProvider extends ServiceProvider
         $this->app->singleton(DataTableManager::class, function (Container $container): DataTableManager {
             return new DataTableManager(
                 $container,
-                new GlobalSearchApplier(),
-                new FilterApplier(),
-                new Sorter(),
-                new LaravelExcelExporter()
+                new GlobalSearchApplier,
+                new FilterApplier,
+                new Sorter,
+                new LaravelExcelExporter
             );
         });
     }
@@ -42,4 +42,3 @@ final class DataTableServiceProvider extends ServiceProvider
         ], 'datatable-config');
     }
 }
-

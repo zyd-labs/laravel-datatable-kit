@@ -70,11 +70,13 @@ final class FilterApplier
                     if (str_ends_with($field, '_count')) {
                         $relation = str_replace('_count', '', $field);
                         $this->applyCountFilter($nested, $relation, $matchMode, $value, $method);
+
                         continue;
                     }
 
                     if (str_contains($field, '.')) {
                         $this->applyRelationFilter($nested, $field, $matchMode, $value, $method);
+
                         continue;
                     }
 
@@ -277,8 +279,7 @@ final class FilterApplier
         }
 
         $hasMethod = $method === 'orWhere' ? 'orWhereHas' : 'whereHas';
-        $query->{$hasMethod}($relationName, function (): void {
-        }, $operator, $value);
+        $query->{$hasMethod}($relationName, function (): void {}, $operator, $value);
     }
 
     private function applyMatchMode(
@@ -297,6 +298,7 @@ final class FilterApplier
                 $query->{$method}($field, 'not like', "%{$value}%");
 
                 return;
+
             case 'startsWith':
                 $query->{$method}($field, 'like', "{$value}%");
 
@@ -342,27 +344,27 @@ final class FilterApplier
 
                 return;
             case 'dateIs':
-                $query->{$method . 'Date'}($field, '=', $value);
+                $query->{$method.'Date'}($field, '=', $value);
 
                 return;
             case 'dateIsNot':
-                $query->{$method . 'Date'}($field, '!=', $value);
+                $query->{$method.'Date'}($field, '!=', $value);
 
                 return;
             case 'dateBefore':
-                $query->{$method . 'Date'}($field, '<', $value);
+                $query->{$method.'Date'}($field, '<', $value);
 
                 return;
             case 'dateAfter':
-                $query->{$method . 'Date'}($field, '>', $value);
+                $query->{$method.'Date'}($field, '>', $value);
 
                 return;
             case 'isNull':
-                $query->{$method . 'Null'}($field);
+                $query->{$method.'Null'}($field);
 
                 return;
             case 'isNotNull':
-                $query->{$method . 'NotNull'}($field);
+                $query->{$method.'NotNull'}($field);
 
                 return;
         }
@@ -409,4 +411,3 @@ final class FilterApplier
         };
     }
 }
-

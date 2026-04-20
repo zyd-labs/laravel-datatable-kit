@@ -9,6 +9,7 @@ use Illuminate\Contracts\Container\Container;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use Symfony\Component\HttpFoundation\Response;
 use ZydLabs\LaravelDataTableKit\Contracts\DataTableExportable;
@@ -17,7 +18,6 @@ use ZydLabs\LaravelDataTableKit\Services\DataTable\Export\ExporterInterface;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\FilterApplier;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\GlobalSearchApplier;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Sorter;
-use Illuminate\Support\Facades\DB;
 
 final class DataTableManager
 {
@@ -27,8 +27,7 @@ final class DataTableManager
         private readonly FilterApplier $filterApplier,
         private readonly Sorter $sorter,
         private readonly ExporterInterface $exporter
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<int, string>  $searchableFields
@@ -56,7 +55,7 @@ final class DataTableManager
     /**
      * @param  array<int, string>  $searchableFields
      * @param  array<int, string>  $filterableFields
-     * @param  array<string, string>  $exportColumns key => heading
+     * @param  array<string, string>  $exportColumns  key => heading
      * @param  Closure(mixed):array|null  $mapRow
      */
     public function export(
@@ -250,4 +249,3 @@ final class DataTableManager
         return (bool) config('app.debug');
     }
 }
-

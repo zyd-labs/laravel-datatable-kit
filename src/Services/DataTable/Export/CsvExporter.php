@@ -71,4 +71,3 @@ final class CsvExporter implements ExporterInterface
         return (string) $value;
     }
 }
-

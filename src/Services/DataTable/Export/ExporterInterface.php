@@ -21,4 +21,3 @@ interface ExporterInterface
         string $fileName
     ): Response;
 }
-

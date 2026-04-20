@@ -89,4 +89,3 @@ class DataTableRequest extends FormRequest
         }
     }
 }
-

@@ -12,8 +12,7 @@ final class DataTableResult
         public readonly Collection $data,
         public readonly int $total,
         public readonly array $queryLogs = []
-    ) {
-    }
+    ) {}
 
     public function toArray(): array
     {
@@ -25,4 +24,3 @@ final class DataTableResult
         ];
     }
 }
-

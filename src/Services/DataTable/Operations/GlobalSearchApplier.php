@@ -47,6 +47,7 @@ final class GlobalSearchApplier
                 if (str_contains($field, '.')) {
                     [$relationName, $column] = explode('.', $field, 2);
                     $this->applyRelationSearch($nested, $relationName, $column, $term);
+
                     continue;
                 }
 
@@ -104,4 +105,3 @@ final class GlobalSearchApplier
         });
     }
 }
-

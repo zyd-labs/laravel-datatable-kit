@@ -12,4 +12,3 @@ interface DataTableExportable
 {
     public function toResponse(DataTableRequest $request, Builder $query): Response;
 }
-

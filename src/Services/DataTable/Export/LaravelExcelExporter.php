@@ -46,4 +46,3 @@ final class LaravelExcelExporter implements ExporterInterface
         return Excel::download($export, $normalizedName);
     }
 }
-

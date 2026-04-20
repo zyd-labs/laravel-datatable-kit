@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace ZydLabs\LaravelDataTableKit\Services\DataTable;
 
-use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Collection;
@@ -22,7 +21,6 @@ final class DataTablePipeline
     /**
      * @param  Collection<int, mixed>  $data
      * @param  array<string, string>  $exportColumns
-     * @param  callable|null  $mapRow
      */
     public function __construct(
         private readonly Collection $data,
@@ -79,4 +77,3 @@ final class DataTablePipeline
         return $payload;
     }
 }
-

@@ -75,4 +75,3 @@ abstract class BaseDataTableExport implements DataTableExportable
         return $countQuery->count() > $this->queueThreshold;
     }
 }
-

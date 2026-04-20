@@ -18,8 +18,7 @@ final class DataTableRequest
         public readonly int $sortOrder,
         public readonly ?string $globalSearch,
         public readonly ?array $filters
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $payload
@@ -36,4 +35,3 @@ final class DataTableRequest
         );
     }
 }
-

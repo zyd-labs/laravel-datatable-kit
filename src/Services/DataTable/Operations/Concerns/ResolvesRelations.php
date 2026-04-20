@@ -77,4 +77,3 @@ trait ResolvesRelations
         return $relatedTable;
     }
 }
-

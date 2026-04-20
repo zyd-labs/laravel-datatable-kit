@@ -16,8 +16,7 @@ abstract class AbstractDataTable
 {
     public function __construct(
         protected readonly DataTableManager $manager,
-    ) {
-    }
+    ) {}
 
     public function render(DataTableFormRequest $request): JsonResponse
     {
@@ -72,4 +71,3 @@ abstract class AbstractDataTable
         return $rows;
     }
 }
-

@@ -13,7 +13,7 @@ use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
 
-final class DataTableQueryExport implements FromQuery, WithHeadings, WithMapping, ShouldAutoSize
+final class DataTableQueryExport implements FromQuery, ShouldAutoSize, WithHeadings, WithMapping
 {
     /**
      * @param  array<int, string>  $headings
@@ -22,8 +22,7 @@ final class DataTableQueryExport implements FromQuery, WithHeadings, WithMapping
         private readonly Builder|QueryBuilder $query,
         private readonly array $headings,
         private readonly Closure $mapRow
-    ) {
-    }
+    ) {}
 
     public function query(): Builder|QueryBuilder
     {
@@ -49,4 +48,3 @@ final class DataTableQueryExport implements FromQuery, WithHeadings, WithMapping
         return $this->headings;
     }
 }
-
