@@ -138,6 +138,10 @@ Paket testlerini çalıştırmak için (repo bağlamında):
 
 Kendi projenizde kullanırken Pest/PHPUnit ile DataTable sınıflarınızdaki sorgu ve filtrelerin domain’e uygunluğunu doğrulamanız önerilir.
 
+## Dokumantasyon
+
+- Detayli kullanim rehberi: `docs/KULLANIM.md`
+
 ## Lisans
 
 MIT Lisansı altında yayınlanmıştır. Detaylar için `LICENSE` dosyasını inceleyin.
