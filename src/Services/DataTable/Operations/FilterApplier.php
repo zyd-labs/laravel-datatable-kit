@@ -291,20 +291,20 @@ final class FilterApplier
     ): void {
         switch ($matchMode) {
             case 'contains':
-                $query->{$method}($field, 'like', "%{$value}%");
+                $query->{$method}($field, $this->likeOperator(), "%{$value}%");
 
                 return;
             case 'notContains':
-                $query->{$method}($field, 'not like', "%{$value}%");
+                $query->{$method}($field, $this->likeOperator(negative: true), "%{$value}%");
 
                 return;
 
             case 'startsWith':
-                $query->{$method}($field, 'like', "{$value}%");
+                $query->{$method}($field, $this->likeOperator(), "{$value}%");
 
                 return;
             case 'endsWith':
-                $query->{$method}($field, 'like', "%{$value}");
+                $query->{$method}($field, $this->likeOperator(), "%{$value}");
 
                 return;
             case 'equals':
@@ -369,14 +369,14 @@ final class FilterApplier
                 return;
         }
 
-        $query->{$method}($field, 'like', "%{$value}%");
+        $query->{$method}($field, $this->likeOperator(), "%{$value}%");
     }
 
     private function getMatchOperator(string $matchMode): string
     {
         return match ($matchMode) {
-            'contains', 'startsWith', 'endsWith' => 'like',
-            'notContains' => 'not like',
+            'contains', 'startsWith', 'endsWith' => $this->likeOperator(),
+            'notContains' => $this->likeOperator(negative: true),
             'equals' => '=',
             'notEquals' => '!=',
             'lt' => '<',
@@ -385,6 +385,21 @@ final class FilterApplier
             'gte' => '>=',
             default => '=',
         };
+    }
+
+    /**
+     * Get the appropriate LIKE operator based on the database driver.
+     * PostgreSQL uses ILIKE for case-insensitive searches, while other databases use LIKE.
+     */
+    private function likeOperator(bool $negative = false): string
+    {
+        $isPostgreSQL = DB::connection()->getDriverName() === 'pgsql';
+
+        if ($isPostgreSQL) {
+            return $negative ? 'not ilike' : 'ilike';
+        }
+
+        return $negative ? 'not like' : 'like';
     }
 
     private function getMatchValue(string $matchMode, mixed $value): mixed
