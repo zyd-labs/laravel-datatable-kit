@@ -93,6 +93,29 @@ public function index(DataTableRequest $request, CallDataTable $table)
 
 - Doğrudan kolonlar ve ilişkisel alanlar (`company.name`) için sıralama.
 - `BelongsToMany`, `HasOne/HasMany`, `Morph` ilişkilerinde alt sorgu veya join destekleri.
+- `sortable()` whitelist ve alias desteği; bilinmeyen `sortField` değerleri SQL’e basılmaz (500 üretmez).
+- `customSorts()` ile accessor/sanal alanlar için özel `orderBy` / `orderByRaw` tanımı.
+- `sortable()` boş bırakılırsa eski davranış korunur (geriye uyumluluk); güvenli mod için whitelist tanımlayın.
+
+```php
+protected function sortable(): array
+{
+    return [
+        'display_name' => 'name',
+        'created_at',
+        'company.name',
+    ];
+}
+
+protected function customSorts(): array
+{
+    return [
+        'display_name' => function (Builder $query, string $direction): void {
+            $query->orderByRaw('COALESCE(NULLIF(trade_name, \'\'), legal_name) '.$direction);
+        },
+    ];
+}
+```
 
 ### Export
 

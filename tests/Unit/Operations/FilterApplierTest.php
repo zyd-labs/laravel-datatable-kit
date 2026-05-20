@@ -5,9 +5,6 @@ declare(strict_types=1);
 namespace ZydLabs\LaravelDataTableKit\Tests\Unit\Operations;
 
 use Illuminate\Database\ConnectionInterface;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
 use PHPUnit\Framework\TestCase;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\FilterApplier;
@@ -19,7 +16,7 @@ class FilterApplierTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->filterApplier = new FilterApplier();
+        $this->filterApplier = new FilterApplier;
     }
 
     /**

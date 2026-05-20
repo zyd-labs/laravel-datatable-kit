@@ -17,7 +17,7 @@ use ZydLabs\LaravelDataTableKit\Http\Requests\DataTableRequest as DataTableFormR
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Export\ExporterInterface;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\FilterApplier;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\GlobalSearchApplier;
-use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Sorter;
+use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\SortApplier;
 
 final class DataTableManager
 {
@@ -25,13 +25,15 @@ final class DataTableManager
         private readonly Container $container,
         private readonly GlobalSearchApplier $globalSearchApplier,
         private readonly FilterApplier $filterApplier,
-        private readonly Sorter $sorter,
+        private readonly SortApplier $sortApplier,
         private readonly ExporterInterface $exporter
     ) {}
 
     /**
      * @param  array<int, string>  $searchableFields
      * @param  array<int, string>  $filterableFields
+     * @param  array<int|string, string>  $sortableFields
+     * @param  array<string, callable(Builder, string): void>  $customSorts
      * @param  Closure(Collection):Collection|null  $transform
      */
     public function handle(
@@ -40,7 +42,9 @@ final class DataTableManager
         array $searchableFields = [],
         array $filterableFields = [],
         ?Closure $transform = null,
-        array $customFilters = []
+        array $customFilters = [],
+        array $sortableFields = [],
+        array $customSorts = []
     ): DataTableResult {
         return $this->process(
             $query,
@@ -48,7 +52,9 @@ final class DataTableManager
             $searchableFields,
             $filterableFields,
             $transform,
-            customFilters: $customFilters
+            customFilters: $customFilters,
+            sortableFields: $sortableFields,
+            customSorts: $customSorts
         )->toJson();
     }
 
@@ -56,6 +62,8 @@ final class DataTableManager
      * @param  array<int, string>  $searchableFields
      * @param  array<int, string>  $filterableFields
      * @param  array<string, string>  $exportColumns  key => heading
+     * @param  array<int|string, string>  $sortableFields
+     * @param  array<string, callable(Builder, string): void>  $customSorts
      * @param  Closure(mixed):array|null  $mapRow
      */
     public function export(
@@ -68,7 +76,9 @@ final class DataTableManager
         DataTableExportable|string|null $customExporter = null,
         ?string $fileName = null,
         ?Closure $transform = null,
-        array $customFilters = []
+        array $customFilters = [],
+        array $sortableFields = [],
+        array $customSorts = []
     ): Response {
         $pipeline = $this->process(
             $query,
@@ -80,7 +90,9 @@ final class DataTableManager
             $exportColumns,
             $mapRow,
             $fileName,
-            $customFilters
+            $customFilters,
+            $sortableFields,
+            $customSorts
         );
 
         return $pipeline->toExport();
@@ -96,7 +108,9 @@ final class DataTableManager
         array $exportColumns = [],
         ?Closure $mapRow = null,
         ?string $fileName = null,
-        array $customFilters = []
+        array $customFilters = [],
+        array $sortableFields = [],
+        array $customSorts = []
     ): DataTablePipeline {
         $resolvedRequest = $this->normalizeRequest($request);
 
@@ -106,7 +120,15 @@ final class DataTableManager
             DB::enableQueryLog();
         }
 
-        $this->applyOperations($query, $resolvedRequest, $searchableFields, $filterableFields, $customFilters);
+        $this->applyOperations(
+            $query,
+            $resolvedRequest,
+            $searchableFields,
+            $filterableFields,
+            $customFilters,
+            $sortableFields,
+            $customSorts
+        );
 
         $total = $this->count($query);
 
@@ -144,13 +166,17 @@ final class DataTableManager
     /**
      * @param  array<int, string>  $searchableFields
      * @param  array<int, string>  $filterableFields
+     * @param  array<int|string, string>  $sortableFields
+     * @param  array<string, callable(Builder, string): void>  $customSorts
      */
     private function applyOperations(
         Builder $query,
         DataTableRequest $request,
         array $searchableFields,
         array $filterableFields,
-        array $customFilters
+        array $customFilters,
+        array $sortableFields,
+        array $customSorts
     ): void {
         $this->globalSearchApplier->apply($query, $request->globalSearch, $searchableFields);
 
@@ -158,9 +184,13 @@ final class DataTableManager
             $this->filterApplier->apply($query, $request->filters, $filterableFields, $customFilters);
         }
 
-        if ($request->sortField !== null && $request->sortOrder !== 0) {
-            $this->sorter->apply($query, $request->sortField, $request->sortOrder);
-        }
+        $this->sortApplier->apply(
+            $query,
+            $request->sortField,
+            $request->sortOrder,
+            $sortableFields,
+            $customSorts
+        );
     }
 
     private function count(Builder $query): int

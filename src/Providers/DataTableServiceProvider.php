@@ -10,6 +10,7 @@ use ZydLabs\LaravelDataTableKit\Services\DataTable\DataTableManager;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Export\LaravelExcelExporter;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\FilterApplier;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\GlobalSearchApplier;
+use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\SortApplier;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Sorter;
 
 final class DataTableServiceProvider extends ServiceProvider
@@ -26,7 +27,7 @@ final class DataTableServiceProvider extends ServiceProvider
                 $container,
                 new GlobalSearchApplier,
                 new FilterApplier,
-                new Sorter,
+                new SortApplier(new Sorter),
                 new LaravelExcelExporter
             );
         });
