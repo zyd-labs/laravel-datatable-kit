@@ -66,6 +66,14 @@ final class GlobalSearchApplier
             return;
         }
 
+        if (str_contains($column, '.')) {
+            $query->orWhereHas($relationName, function (Builder $relQuery) use ($column, $term): void {
+                $this->applyNestedRelationSearch($relQuery, $column, $term);
+            });
+
+            return;
+        }
+
         $relatedTable = $relation->getRelated()->getTable();
 
         if ($relation instanceof BelongsTo) {
@@ -102,6 +110,21 @@ final class GlobalSearchApplier
 
         $query->orWhereHas($relationName, function (Builder $relQuery) use ($column, $term): void {
             $relQuery->where($column, 'like', "%{$term}%");
+        });
+    }
+
+    private function applyNestedRelationSearch(Builder $query, string $field, string $term): void
+    {
+        if (! str_contains($field, '.')) {
+            $query->where($field, 'like', "%{$term}%");
+
+            return;
+        }
+
+        [$relation, $remaining] = explode('.', $field, 2);
+
+        $query->whereHas($relation, function (Builder $nested) use ($remaining, $term): void {
+            $this->applyNestedRelationSearch($nested, $remaining, $term);
         });
     }
 }
