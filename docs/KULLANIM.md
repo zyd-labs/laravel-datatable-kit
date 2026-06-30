@@ -168,6 +168,35 @@ Desteklenen `matchMode` degerleri:
 - `files_count` gibi bir alan `*_count` kalibina uydugunda ilgili relation icin count alt sorgusu calisir.
 - Bu ozellik buyuk tablolarda dogru indekslerle birlikte kullanilmalidir.
 
+### 6.3 Siralama Whitelist ve Alias
+
+`sortable()` tanimli degilse (bos dizi) eski davranis korunur: gelen `sortField` dogrudan sorter'a gider.
+Guvenli mod icin whitelist tanimlayin; listede olmayan alanlar yok sayilir (500 uretilmez).
+
+```php
+protected function sortable(): array
+{
+    return [
+        'display_name' => 'name',
+        'created_at',
+        'company.name',
+    ];
+}
+
+protected function customSorts(): array
+{
+    return [
+        'display_name' => function (Builder $query, string $direction): void {
+            $query->orderByRaw('COALESCE(NULLIF(trade_name, \'\'), legal_name) '.$direction);
+        },
+    ];
+}
+```
+
+- Alias: frontend `sortField=display_name` gonderir, SQL `name` veya iliskili alan uzerinden calisir.
+- `customSorts()` ayni anahtar icin alias'tan once calisir.
+- Yon (`asc`/`desc`) yalnizca `sortOrder` uzerinden normalize edilir.
+
 ## 7) Custom Filtreler
 
 Standart matchMode'un disina cikmak icin DataTable sinifinda `customFilters()` ezin:
@@ -222,7 +251,7 @@ Kullanim senaryolari:
 ### 9.2 Guvenlik
 
 - Her endpointte Policy/Gate kontrolu yapin.
-- `searchable()`/`filterable()` whitelist'i disina cikmayin.
+- `searchable()`/`filterable()`/`sortable()` whitelist'i disina cikmayin.
 - Hassas alanlari (PII vb.) DataTable listesine dahil etmeyin.
 - Export aksiyonu icin ayri yetki kontrolu uygulayin.
 

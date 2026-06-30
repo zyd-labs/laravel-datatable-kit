@@ -18,9 +18,9 @@ final class Sorter
 {
     use ResolvesRelations;
 
-    public function apply(Builder $query, string $field, int $order): void
+    public function apply(Builder $query, string $field, string $direction): void
     {
-        $direction = $order === -1 ? 'desc' : 'asc';
+        $direction = strtolower($direction) === 'desc' ? 'desc' : 'asc';
 
         if (! str_contains($field, '.')) {
             $query->orderBy($field, $direction);

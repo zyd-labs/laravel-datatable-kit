@@ -37,7 +37,9 @@ abstract class AbstractDataTable
             $this->filterable(),
             fn (Collection $collection) => $this->afterLoad($collection),
             customExporter: $this->exporterClass(),
-            customFilters: $this->customFilters()
+            customFilters: $this->customFilters(),
+            sortableFields: $this->sortable(),
+            customSorts: $this->customSorts()
         );
     }
 
@@ -56,6 +58,28 @@ abstract class AbstractDataTable
     protected function exporterClass(): ?string
     {
         return null;
+    }
+
+    /**
+     * Whitelisted sort fields. Supports list entries and aliases:
+     * ['created_at', 'company.name', 'display_name' => 'name']
+     *
+     * When empty, legacy mode applies: any sortField is passed to the sorter (backward compatible).
+     * When non-empty, unknown sortField values are ignored (no SQL, no exception).
+     *
+     * @return array<int|string, string>
+     */
+    protected function sortable(): array
+    {
+        return [];
+    }
+
+    /**
+     * @return array<string, callable(Builder, string): void>
+     */
+    protected function customSorts(): array
+    {
+        return [];
     }
 
     /**
