@@ -4,6 +4,16 @@
 
 ## Kurulum
 
+### Gereksinimler
+
+- PHP 8.3 veya daha yeni bir 8.x sürümü (`^8.3`; PHP 8.4 ve 8.5 dahil).
+- Laravel 12 ve Laravel Excel 4 (`^4.0`).
+- Paket testleri için Orchestra Testbench 10 ve PHPUnit 11.
+
+Paketin geliştirme bağımlılıkları, `config.platform.php` ile PHP 8.3.0 hedeflenerek çözülür.
+Bu ayar tüketici projelerin PHP sürümünü değiştirmez. PHP 8.2 ve Laravel 11 kullanan
+projeler önceki paket revizyonunda kalmalıdır.
+
 > Repo içerisinde paket `path repository` olarak tanımlanmış durumda:
 >
 > ```json
@@ -168,4 +178,3 @@ Kendi projenizde kullanırken Pest/PHPUnit ile DataTable sınıflarınızdaki so
 ## Lisans
 
 MIT Lisansı altında yayınlanmıştır. Detaylar için `LICENSE` dosyasını inceleyin.
-
