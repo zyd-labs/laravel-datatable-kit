@@ -78,6 +78,19 @@ trait ResolvesRelations
     }
 
     /**
+     * Resolve the BelongsTo join alias using the same trashed-mode rules as ensureJoinExists().
+     */
+    protected function resolveBelongsToJoinAlias(BelongsTo $relation, ?string $relationName, string $baseTable): string
+    {
+        return $this->getJoinAlias(
+            $relation,
+            $relationName,
+            $baseTable,
+            $this->resolveBelongsToTrashedMode($relation)
+        );
+    }
+
+    /**
      * @return 'none'|'without'|'with'|'only'
      */
     protected function resolveBelongsToTrashedMode(BelongsTo $relation): string
@@ -130,17 +143,34 @@ trait ResolvesRelations
     ): string {
         $relatedTable = $relation->getRelated()->getTable();
 
-        if ($relationName !== null && $relatedTable === $baseTable) {
-            $alias = sprintf('%s_%s', $relationName, $relatedTable);
-        } elseif (in_array($trashedMode, ['with', 'only'], true)) {
-            // Distinct aliases when the same related table is joined under different trashed modes.
-            $prefix = $relationName ?? $relatedTable;
-            $alias = sprintf('%s__%s', $prefix, $trashedMode);
-        } else {
-            $alias = $relatedTable;
+        // Prefer the relation name so multiple BelongsTo relations targeting the same
+        // table (createdBy/approvedBy → users) never share a join alias.
+        if ($relationName !== null && $relationName !== '') {
+            $alias = $this->sanitizeJoinAlias($relationName);
+
+            if (in_array($trashedMode, ['with', 'only'], true)) {
+                return sprintf('%s__%s', $alias, $trashedMode);
+            }
+
+            return $alias;
         }
 
-        return $alias;
+        if (in_array($trashedMode, ['with', 'only'], true)) {
+            return sprintf('%s__%s', $relatedTable, $trashedMode);
+        }
+
+        if ($relatedTable === $baseTable) {
+            return sprintf('%s_related', $relatedTable);
+        }
+
+        return $relatedTable;
+    }
+
+    protected function sanitizeJoinAlias(string $alias): string
+    {
+        $sanitized = preg_replace('/[^A-Za-z0-9_]/', '_', $alias) ?? $alias;
+
+        return $sanitized !== '' ? $sanitized : 'related';
     }
 
     protected function softDeletedAtColumn(Model $related): ?string

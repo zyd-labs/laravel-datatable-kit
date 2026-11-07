@@ -22,6 +22,11 @@ class Post extends Model
         return $this->belongsTo(Author::class);
     }
 
+    public function editor(): BelongsTo
+    {
+        return $this->belongsTo(Author::class, 'editor_id');
+    }
+
     public function authorWithTrashed(): BelongsTo
     {
         return $this->belongsTo(Author::class, 'author_id')->withTrashed();
@@ -30,6 +35,11 @@ class Post extends Model
     public function authorOnlyTrashed(): BelongsTo
     {
         return $this->belongsTo(Author::class, 'author_id')->onlyTrashed();
+    }
+
+    public function editorWithTrashed(): BelongsTo
+    {
+        return $this->belongsTo(Author::class, 'editor_id')->withTrashed();
     }
 
     public function legacyAuthor(): BelongsTo

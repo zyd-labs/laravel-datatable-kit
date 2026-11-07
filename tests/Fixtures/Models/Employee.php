@@ -39,6 +39,11 @@ class Employee extends Model
         return $this->belongsTo(Company::class);
     }
 
+    public function manager(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'manager_id');
+    }
+
     public function healthDocuments(): HasMany
     {
         return $this->hasMany(HealthDocument::class);

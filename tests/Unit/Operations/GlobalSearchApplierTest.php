@@ -140,4 +140,35 @@ class GlobalSearchApplierTest extends TestCase
         $this->assertStringContainsString('issued_by', $sql);
         $this->assertStringNotContainsString('exists', strtolower($sql));
     }
+
+    public function test_belongs_to_search_uses_relation_name_alias(): void
+    {
+        $query = HealthDocument::query();
+        $this->globalSearchApplier->apply($query, 'Ali', ['employee.full_name']);
+
+        $sql = strtolower(str_replace('"', '', $query->toSql()));
+
+        $this->assertStringContainsString('as employee', $sql);
+        $this->assertStringContainsString('employee.full_name', $sql);
+    }
+
+    public function test_has_many_search_uses_or_where_has(): void
+    {
+        $query = Company::query();
+        $this->globalSearchApplier->apply($query, 'Ali', ['employees.full_name']);
+
+        $sql = strtolower($query->toSql());
+
+        $this->assertStringContainsString('exists', $sql);
+        $this->assertStringContainsString('full_name', $sql);
+    }
+
+    public function test_nested_belongs_to_does_not_create_unnecessary_join(): void
+    {
+        $query = HealthDocument::query();
+        $this->globalSearchApplier->apply($query, 'ÖZL', ['employee.company.name']);
+
+        $this->assertSame([], $query->getQuery()->joins ?? []);
+        $this->assertStringContainsString('exists', strtolower($query->toSql()));
+    }
 }

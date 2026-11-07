@@ -255,8 +255,7 @@ final class FilterApplier
         $this->ensureJoinExists($query, $relation, $relationName);
 
         $baseTable = $query->getModel()->getTable();
-        $trashedMode = $this->resolveBelongsToTrashedMode($relation);
-        $alias = $this->getJoinAlias($relation, $relationName, $baseTable, $trashedMode);
+        $alias = $this->resolveBelongsToJoinAlias($relation, $relationName, $baseTable);
 
         $this->applyMatchMode($query, "{$alias}.{$column}", $matchMode, $value, $method);
     }

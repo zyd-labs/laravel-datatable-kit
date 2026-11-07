@@ -57,6 +57,7 @@ abstract class TestCase extends OrchestraTestCase
         Schema::create('employees', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('company_id')->nullable();
+            $table->unsignedInteger('manager_id')->nullable();
             $table->unsignedInteger('tenant_id')->default(1);
             $table->string('name');
             $table->decimal('salary', 10, 2)->nullable();
@@ -81,6 +82,7 @@ abstract class TestCase extends OrchestraTestCase
         Schema::create('posts', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('author_id')->nullable();
+            $table->unsignedInteger('editor_id')->nullable();
             $table->unsignedInteger('legacy_author_id')->nullable();
             $table->unsignedInteger('tenant_id')->default(1);
             $table->string('title');

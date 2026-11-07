@@ -144,4 +144,52 @@ class SortApplierTest extends TestCase
             ['column' => 'title', 'direction' => 'asc'],
         ], $query->getQuery()->orders);
     }
+
+    public function test_belongs_to_sort_uses_relation_name_alias(): void
+    {
+        $query = Post::query();
+
+        (new Sorter)->apply($query, 'author.name', 'asc');
+
+        $sql = strtolower(str_replace('"', '', $query->toSql()));
+
+        $this->assertStringContainsString('as author', $sql);
+        $this->assertSame([
+            ['column' => 'author.name', 'direction' => 'asc'],
+        ], $query->getQuery()->orders);
+    }
+
+    public function test_two_belongs_to_same_table_get_distinct_sort_aliases(): void
+    {
+        $query = Post::query();
+        $sorter = new Sorter;
+
+        $sorter->apply($query, 'author.name', 'asc');
+        $sorter->apply($query, 'editor.name', 'desc');
+
+        $sql = strtolower(str_replace('"', '', $query->toSql()));
+        $joins = $query->getQuery()->joins ?? [];
+
+        $this->assertCount(2, $joins);
+        $this->assertStringContainsString('as author', $sql);
+        $this->assertStringContainsString('as editor', $sql);
+        $this->assertSame([
+            ['column' => 'author.name', 'direction' => 'asc'],
+            ['column' => 'editor.name', 'direction' => 'desc'],
+        ], $query->getQuery()->orders);
+    }
+
+    public function test_with_trashed_belongs_to_sort_uses_trashed_alias_suffix(): void
+    {
+        $query = Post::query();
+
+        (new Sorter)->apply($query, 'authorWithTrashed.name', 'desc');
+
+        $sql = str_replace('"', '', $query->toSql());
+
+        $this->assertStringContainsString('__with', $sql);
+        $this->assertSame([
+            ['column' => 'authorWithTrashed__with.name', 'direction' => 'desc'],
+        ], $query->getQuery()->orders);
+    }
 }

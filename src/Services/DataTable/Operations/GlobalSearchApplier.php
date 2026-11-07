@@ -7,10 +7,6 @@ namespace ZydLabs\LaravelDataTableKit\Services\DataTable\Operations;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Facades\DB;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Concerns\ResolvesRelations;
 
 final class GlobalSearchApplier
@@ -33,10 +29,11 @@ final class GlobalSearchApplier
                 continue;
             }
 
-            [$relationName] = explode('.', $field, 2);
+            [$relationName, $remainder] = explode('.', $field, 2);
             $relation = $this->getRelationInstance($model, $relationName);
 
-            if ($relation instanceof BelongsTo) {
+            // Only join single-level BelongsTo fields; nested paths use whereHas.
+            if ($relation instanceof BelongsTo && ! str_contains($remainder, '.')) {
                 $this->ensureJoinExists($query, $relation, $relationName);
             }
         }
@@ -74,54 +71,37 @@ final class GlobalSearchApplier
             return;
         }
 
-        $relatedTable = $relation->getRelated()->getTable();
-
         if ($relation instanceof BelongsTo) {
             $baseTable = $model->getTable();
-            $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
+            $alias = $this->resolveBelongsToJoinAlias($relation, $relationName, $baseTable);
 
             $query->orWhere("{$alias}.{$column}", 'like', "%{$term}%");
 
             return;
         }
 
-        if ($relation instanceof HasOne || $relation instanceof HasMany) {
-            $foreignKey = $relation->getForeignKeyName();
-            $localKey = $relation->getLocalKeyName();
-            $baseTable = $model->getTable();
-
-            $query->orWhereExists(function (Builder $subQuery) use ($relatedTable, $baseTable, $foreignKey, $localKey, $column, $term): void {
-                $subQuery->select(DB::raw('1'))
-                    ->from($relatedTable)
-                    ->whereColumn("{$relatedTable}.{$foreignKey}", "{$baseTable}.{$localKey}")
-                    ->where($column, 'like', "%{$term}%");
-            });
-
-            return;
-        }
-
-        if ($relation instanceof BelongsToMany) {
-            $query->orWhereHas($relationName, function (Builder $relQuery) use ($column, $term): void {
-                $relQuery->where($column, 'like', "%{$term}%");
-            });
-
-            return;
-        }
-
+        // HasOne/HasMany/BelongsToMany/Morph* — whereHas preserves SoftDeletes,
+        // global scopes, tenant scopes, and relation-level where clauses.
         $query->orWhereHas($relationName, function (Builder $relQuery) use ($column, $term): void {
-            $relQuery->where($column, 'like', "%{$term}%");
+            $relatedTable = $relQuery->getModel()->getTable();
+            $relQuery->where("{$relatedTable}.{$column}", 'like', "%{$term}%");
         });
     }
 
     private function applyNestedRelationSearch(Builder $query, string $field, string $term): void
     {
         if (! str_contains($field, '.')) {
-            $query->where($field, 'like', "%{$term}%");
+            $relatedTable = $query->getModel()->getTable();
+            $query->where("{$relatedTable}.{$field}", 'like', "%{$term}%");
 
             return;
         }
 
         [$relation, $remaining] = explode('.', $field, 2);
+
+        if ($this->getRelationInstance($query->getModel(), $relation) === null) {
+            return;
+        }
 
         $query->whereHas($relation, function (Builder $nested) use ($remaining, $term): void {
             $this->applyNestedRelationSearch($nested, $remaining, $term);
