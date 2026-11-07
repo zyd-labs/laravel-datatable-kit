@@ -215,6 +215,77 @@ final class SorterRelationScopeTest extends TestCase
         $this->assertGreaterThanOrEqual(4, $query->count());
     }
 
+    public function test_belongs_to_many_sort_preserves_where_pivot(): void
+    {
+        $postOne = Post::query()->create([
+            'author_id' => $this->alice->id,
+            'tenant_id' => 1,
+            'title' => 'Pivot Post One',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+        $postTwo = Post::query()->create([
+            'author_id' => $this->bob->id,
+            'tenant_id' => 1,
+            'title' => 'Pivot Post Two',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+
+        $tagAaa = Tag::query()->create(['name' => 'AAA', 'is_published' => true]);
+        $tagZzz = Tag::query()->create(['name' => 'ZZZ', 'is_published' => true]);
+        $tagMmm = Tag::query()->create(['name' => 'MMM', 'is_published' => true]);
+
+        $postOne->tags()->attach([
+            $tagAaa->id => ['is_active' => false],
+            $tagZzz->id => ['is_active' => true],
+        ]);
+        $postTwo->tags()->attach([
+            $tagMmm->id => ['is_active' => true],
+        ]);
+
+        $query = Post::query()->whereIn('posts.id', [$postOne->id, $postTwo->id]);
+        $this->sorter->apply($query, 'activeTags.name', 'asc');
+
+        $ids = $query->pluck('posts.id')->map(fn ($id): int => (int) $id)->all();
+
+        // Inactive pivot tag AAA must not determine Post #1's sort key (ZZZ).
+        $this->assertSame([(int) $postTwo->id, (int) $postOne->id], $ids);
+    }
+
+    public function test_belongs_to_many_sort_preserves_relation_where(): void
+    {
+        $postOne = Post::query()->create([
+            'author_id' => $this->alice->id,
+            'tenant_id' => 1,
+            'title' => 'Published Tag Post One',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+        $postTwo = Post::query()->create([
+            'author_id' => $this->bob->id,
+            'tenant_id' => 1,
+            'title' => 'Published Tag Post Two',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+
+        $tagAaa = Tag::query()->create(['name' => 'AAA', 'is_published' => false]);
+        $tagZzz = Tag::query()->create(['name' => 'ZZZ', 'is_published' => true]);
+        $tagMmm = Tag::query()->create(['name' => 'MMM', 'is_published' => true]);
+
+        $postOne->tags()->attach([$tagAaa->id, $tagZzz->id]);
+        $postTwo->tags()->attach([$tagMmm->id]);
+
+        $query = Post::query()->whereIn('posts.id', [$postOne->id, $postTwo->id]);
+        $this->sorter->apply($query, 'publishedTags.name', 'asc');
+
+        $ids = $query->pluck('posts.id')->map(fn ($id): int => (int) $id)->all();
+
+        // Unpublished AAA must not determine Post #1's sort key (ZZZ).
+        $this->assertSame([(int) $postTwo->id, (int) $postOne->id], $ids);
+    }
+
     private function seedFixtures(): void
     {
         $this->alice = Author::query()->create([

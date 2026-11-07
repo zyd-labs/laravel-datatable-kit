@@ -115,11 +115,17 @@ final class Sorter
             }
 
             if ($relation instanceof BelongsToMany) {
-                return $relation->getRelationExistenceQuery(
-                    $related->newQuery(),
-                    $parentQuery,
-                    [$qualifiedColumn]
-                )->limit(1);
+                // Under Relation::noConstraints, BelongsToMany::addConstraints() still
+                // performJoin()s once but skips the parent-key where. Reuse that query so
+                // wherePivot()/relation where()/SoftDeletes remain, and only correlate the
+                // parent row — calling getRelationExistenceQuery() would join the pivot twice.
+                return $relation->getQuery()
+                    ->select($qualifiedColumn)
+                    ->whereColumn(
+                        $relation->getQualifiedParentKeyName(),
+                        $relation->getQualifiedForeignPivotKeyName()
+                    )
+                    ->limit(1);
             }
 
             return $related->newQuery()

@@ -100,6 +100,7 @@ abstract class TestCase extends OrchestraTestCase
         Schema::create('tags', function (Blueprint $table): void {
             $table->increments('id');
             $table->string('name');
+            $table->boolean('is_published')->default(true);
             $table->date('tagged_on')->nullable();
             $table->softDeletes();
         });
@@ -107,6 +108,7 @@ abstract class TestCase extends OrchestraTestCase
         Schema::create('post_tag', function (Blueprint $table): void {
             $table->unsignedInteger('post_id');
             $table->unsignedInteger('tag_id');
+            $table->boolean('is_active')->default(true);
             $table->primary(['post_id', 'tag_id']);
         });
 

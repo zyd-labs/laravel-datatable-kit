@@ -62,6 +62,16 @@ class Post extends Model
         return $this->belongsToMany(Tag::class);
     }
 
+    public function activeTags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class)->wherePivot('is_active', true);
+    }
+
+    public function publishedTags(): BelongsToMany
+    {
+        return $this->belongsToMany(Tag::class)->where('tags.is_published', true);
+    }
+
     public function comments(): MorphMany
     {
         return $this->morphMany(Comment::class, 'commentable');
