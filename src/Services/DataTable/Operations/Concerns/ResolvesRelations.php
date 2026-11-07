@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\Relation;
+use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\Query\JoinClause;
 
 trait ResolvesRelations
 {
@@ -32,6 +34,7 @@ trait ResolvesRelations
 
         $relationName ??= method_exists($relation, 'getRelationName') ? $relation->getRelationName() : null;
         $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
+        $deletedAtColumn = $this->softDeletedAtColumn($relation->getRelated());
 
         $joins = $query->getQuery()->joins ?? [];
         foreach ($joins as $join) {
@@ -44,21 +47,17 @@ trait ResolvesRelations
             }
         }
 
-        if ($alias !== $relatedTable) {
-            $query->leftJoin(
-                sprintf('%s as %s', $relatedTable, $alias),
-                "{$baseTable}.{$foreignKey}",
-                '=',
-                "{$alias}.{$ownerKey}"
-            );
-        } else {
-            $query->leftJoin(
-                $relatedTable,
-                "{$baseTable}.{$foreignKey}",
-                '=',
-                "{$relatedTable}.{$ownerKey}"
-            );
-        }
+        $joinTable = $alias !== $relatedTable
+            ? sprintf('%s as %s', $relatedTable, $alias)
+            : $relatedTable;
+
+        $query->leftJoin($joinTable, function (JoinClause $join) use ($baseTable, $foreignKey, $alias, $ownerKey, $deletedAtColumn): void {
+            $join->on("{$baseTable}.{$foreignKey}", '=', "{$alias}.{$ownerKey}");
+
+            if ($deletedAtColumn !== null) {
+                $join->whereNull("{$alias}.{$deletedAtColumn}");
+            }
+        });
 
         $columns = $query->getQuery()->columns;
         if ($columns === null || $columns === []) {
@@ -75,5 +74,18 @@ trait ResolvesRelations
         }
 
         return $relatedTable;
+    }
+
+    protected function softDeletedAtColumn(Model $related): ?string
+    {
+        if (! in_array(SoftDeletes::class, class_uses_recursive($related), true)) {
+            return null;
+        }
+
+        if (! method_exists($related, 'getDeletedAtColumn')) {
+            return 'deleted_at';
+        }
+
+        return $related->getDeletedAtColumn();
     }
 }

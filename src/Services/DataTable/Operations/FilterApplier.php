@@ -19,8 +19,21 @@ final class FilterApplier
     use ResolvesRelations;
 
     /**
+     * Match modes that remain meaningful when the constraint value is null.
+     *
+     * @var list<string>
+     */
+    private const NULL_VALUE_MATCH_MODES = [
+        'isNull',
+        'isNotNull',
+        'equals',
+        'notEquals',
+    ];
+
+    /**
      * @param  array<string, array<string, mixed>>  $filters
      * @param  array<int, string>  $filterableFields
+     * @param  array<string, callable>  $customFilters
      */
     public function apply(Builder $query, array $filters, array $filterableFields, array $customFilters = []): void
     {
@@ -44,7 +57,7 @@ final class FilterApplier
                 continue;
             }
 
-            $operator = $filter['operator'] ?? 'and';
+            $operator = ($filter['operator'] ?? 'and') === 'or' ? 'or' : 'and';
             $constraints = $filter['constraints'] ?? [];
 
             if (array_key_exists($field, $customFilters) && is_callable($customFilters[$field])) {
@@ -56,15 +69,35 @@ final class FilterApplier
             }
 
             $baseTable = $query->getModel()->getTable();
-            $query->where(function (Builder $nested) use ($field, $constraints, $operator, $baseTable): void {
-                foreach ($constraints as $index => $constraint) {
-                    $value = $constraint['value'] ?? null;
-                    $matchMode = $constraint['matchMode'] ?? 'contains';
+            $applicable = [];
 
-                    if ($value === null && $matchMode !== 'equals') {
-                        continue;
-                    }
+            foreach ($constraints as $constraint) {
+                if (! is_array($constraint)) {
+                    continue;
+                }
 
+                $value = array_key_exists('value', $constraint) ? $constraint['value'] : null;
+                $matchMode = (string) ($constraint['matchMode'] ?? 'contains');
+
+                if ($this->shouldSkipConstraint($matchMode, $value)) {
+                    continue;
+                }
+
+                $applicable[] = [
+                    'matchMode' => $matchMode,
+                    'value' => $value,
+                ];
+            }
+
+            if ($applicable === []) {
+                continue;
+            }
+
+            // Group constraints so OR never escapes surrounding tenant/authorization scopes.
+            $query->where(function (Builder $nested) use ($field, $applicable, $operator, $baseTable): void {
+                foreach ($applicable as $index => $constraint) {
+                    $matchMode = $constraint['matchMode'];
+                    $value = $constraint['value'];
                     $method = ($operator === 'or' && $index > 0) ? 'orWhere' : 'where';
 
                     if (str_ends_with($field, '_count')) {
@@ -80,11 +113,62 @@ final class FilterApplier
                         continue;
                     }
 
-                    // Direkt kolonlar için tablo prefix'i ekle (ambiguous hata önlemek için)
                     $this->applyMatchMode($nested, "{$baseTable}.{$field}", $matchMode, $value, $method);
                 }
             });
         }
+    }
+
+    private function shouldSkipConstraint(string $matchMode, mixed $value): bool
+    {
+        if (in_array($matchMode, ['isNull', 'isNotNull'], true)) {
+            return false;
+        }
+
+        if ($value === null) {
+            return ! in_array($matchMode, self::NULL_VALUE_MATCH_MODES, true);
+        }
+
+        if ($matchMode === 'between') {
+            return ! $this->isValidBetweenValue($value);
+        }
+
+        if ($matchMode === 'in') {
+            // Non-arrays are ignored; empty arrays are applied as a never-matching predicate.
+            return ! is_array($value);
+        }
+
+        return false;
+    }
+
+    private function isValidBetweenValue(mixed $value): bool
+    {
+        if (! is_array($value) || count($value) !== 2) {
+            return false;
+        }
+
+        $bounds = array_values($value);
+
+        return $bounds[0] !== null && $bounds[0] !== ''
+            && $bounds[1] !== null && $bounds[1] !== '';
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function normalizeInValue(array $value): array
+    {
+        $items = [];
+
+        foreach ($value as $item) {
+            if ($item === null) {
+                continue;
+            }
+
+            $items[] = $item;
+        }
+
+        return $items;
     }
 
     private function applyRelationFilter(
@@ -131,7 +215,8 @@ final class FilterApplier
         if ($relation instanceof MorphOne || $relation instanceof MorphMany) {
             $hasMethod = $method === 'orWhere' ? 'orWhereHasMorph' : 'whereHasMorph';
             $query->{$hasMethod}($relationName, '*', function (Builder $relQuery) use ($column, $matchMode, $value): void {
-                $relQuery->where($column, $this->getMatchOperator($matchMode), $this->getMatchValue($matchMode, $value));
+                $relatedTable = $relQuery->getModel()->getTable();
+                $this->applyMatchMode($relQuery, "{$relatedTable}.{$column}", $matchMode, $value, 'where');
             });
 
             return;
@@ -139,7 +224,8 @@ final class FilterApplier
 
         $hasMethod = $method === 'orWhere' ? 'orWhereHas' : 'whereHas';
         $query->{$hasMethod}($relationName, function (Builder $relQuery) use ($column, $matchMode, $value): void {
-            $relQuery->where($column, $this->getMatchOperator($matchMode), $this->getMatchValue($matchMode, $value));
+            $relatedTable = $relQuery->getModel()->getTable();
+            $this->applyMatchMode($relQuery, "{$relatedTable}.{$column}", $matchMode, $value, 'where');
         });
     }
 
@@ -150,12 +236,17 @@ final class FilterApplier
         mixed $value
     ): void {
         if (! str_contains($field, '.')) {
-            $query->where($field, $this->getMatchOperator($matchMode), $this->getMatchValue($matchMode, $value));
+            $relatedTable = $query->getModel()->getTable();
+            $this->applyMatchMode($query, "{$relatedTable}.{$field}", $matchMode, $value, 'where');
 
             return;
         }
 
         [$relation, $remaining] = explode('.', $field, 2);
+
+        if ($this->getRelationInstance($query->getModel(), $relation) === null) {
+            return;
+        }
 
         $query->whereHas($relation, function (Builder $nested) use ($remaining, $matchMode, $value): void {
             $this->applyNestedRelationFilter($nested, $remaining, $matchMode, $value);
@@ -176,11 +267,7 @@ final class FilterApplier
         $baseTable = $query->getModel()->getTable();
         $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
 
-        $query->{$method}(
-            "{$alias}.{$column}",
-            $this->getMatchOperator($matchMode),
-            $this->getMatchValue($matchMode, $value)
-        );
+        $this->applyMatchMode($query, "{$alias}.{$column}", $matchMode, $value, $method);
     }
 
     private function applyHasRelationFilter(
@@ -198,11 +285,18 @@ final class FilterApplier
         $baseTable = $model->getTable();
         $existsMethod = $method === 'orWhere' ? 'orWhereExists' : 'whereExists';
 
-        $query->{$existsMethod}(function (Builder $subQuery) use ($relatedTable, $baseTable, $foreignKey, $localKey, $column, $matchMode, $value): void {
+        $query->{$existsMethod}(function ($subQuery) use ($relatedTable, $baseTable, $foreignKey, $localKey, $column, $matchMode, $value): void {
             $subQuery->select(DB::raw('1'))
                 ->from($relatedTable)
-                ->whereColumn("{$relatedTable}.{$foreignKey}", "{$baseTable}.{$localKey}")
-                ->where($column, $this->getMatchOperator($matchMode), $this->getMatchValue($matchMode, $value));
+                ->whereColumn("{$relatedTable}.{$foreignKey}", "{$baseTable}.{$localKey}");
+
+            $this->applyMatchModeOnQueryBuilder(
+                $subQuery,
+                "{$relatedTable}.{$column}",
+                $matchMode,
+                $value,
+                'where'
+            );
         });
     }
 
@@ -217,7 +311,8 @@ final class FilterApplier
         $hasMethod = $method === 'orWhere' ? 'orWhereHas' : 'whereHas';
 
         $query->{$hasMethod}($relationName, function (Builder $relQuery) use ($column, $matchMode, $value): void {
-            $relQuery->where($column, $this->getMatchOperator($matchMode), $this->getMatchValue($matchMode, $value));
+            $relatedTable = $relQuery->getModel()->getTable();
+            $this->applyMatchMode($relQuery, "{$relatedTable}.{$column}", $matchMode, $value, 'where');
         }, '>=', 1);
     }
 
@@ -289,6 +384,20 @@ final class FilterApplier
         mixed $value,
         string $method = 'where'
     ): void {
+        $this->applyMatchModeOnQueryBuilder($query, $field, $matchMode, $value, $method);
+    }
+
+    /**
+     * Shared match-mode application for Eloquent builders and nested query builders
+     * (e.g. whereExists closures).
+     */
+    private function applyMatchModeOnQueryBuilder(
+        object $query,
+        string $field,
+        string $matchMode,
+        mixed $value,
+        string $method = 'where'
+    ): void {
         switch ($matchMode) {
             case 'contains':
                 $query->{$method}($field, $this->likeOperator(), "%{$value}%");
@@ -298,7 +407,6 @@ final class FilterApplier
                 $query->{$method}($field, $this->likeOperator(negative: true), "%{$value}%");
 
                 return;
-
             case 'startsWith':
                 $query->{$method}($field, $this->likeOperator(), "{$value}%");
 
@@ -308,10 +416,22 @@ final class FilterApplier
 
                 return;
             case 'equals':
+                if ($value === null) {
+                    $query->{$method.'Null'}($field);
+
+                    return;
+                }
+
                 $query->{$method}($field, '=', $value);
 
                 return;
             case 'notEquals':
+                if ($value === null) {
+                    $query->{$method.'NotNull'}($field);
+
+                    return;
+                }
+
                 $query->{$method}($field, '!=', $value);
 
                 return;
@@ -332,15 +452,22 @@ final class FilterApplier
 
                 return;
             case 'between':
-                if (is_array($value) && count($value) === 2) {
-                    $query->whereBetween($field, $value);
+                if (! $this->isValidBetweenValue($value)) {
+                    return;
                 }
+
+                $betweenMethod = $method === 'orWhere' ? 'orWhereBetween' : 'whereBetween';
+                $query->{$betweenMethod}($field, array_values($value));
 
                 return;
             case 'in':
-                if (is_array($value)) {
-                    $query->whereIn($field, $value);
+                if (! is_array($value)) {
+                    return;
                 }
+
+                $inMethod = $method === 'orWhere' ? 'orWhereIn' : 'whereIn';
+                // Empty arrays become a never-matching predicate in Laravel (0 = 1).
+                $query->{$inMethod}($field, $this->normalizeInValue($value));
 
                 return;
             case 'dateIs':
