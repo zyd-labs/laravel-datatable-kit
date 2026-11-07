@@ -6,7 +6,6 @@ namespace ZydLabs\LaravelDataTableKit\Services\DataTable\Operations;
 
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Concerns\ResolvesRelations;
 
 final class GlobalSearchApplier
@@ -23,22 +22,9 @@ final class GlobalSearchApplier
         }
 
         $model = $query->getModel();
-
-        foreach ($fields as $field) {
-            if (! str_contains($field, '.')) {
-                continue;
-            }
-
-            [$relationName, $remainder] = explode('.', $field, 2);
-            $relation = $this->getRelationInstance($model, $relationName);
-
-            // Only join single-level BelongsTo fields; nested paths use whereHas.
-            if ($relation instanceof BelongsTo && ! str_contains($remainder, '.')) {
-                $this->ensureJoinExists($query, $relation, $relationName);
-            }
-        }
-
         $baseTable = $model->getTable();
+
+        // Keep OR terms inside this group so outer tenant/authorization scopes stay intact.
         $query->where(function (Builder $nested) use ($term, $fields, $baseTable): void {
             foreach ($fields as $field) {
                 if (str_contains($field, '.')) {
@@ -71,17 +57,8 @@ final class GlobalSearchApplier
             return;
         }
 
-        if ($relation instanceof BelongsTo) {
-            $baseTable = $model->getTable();
-            $alias = $this->resolveBelongsToJoinAlias($relation, $relationName, $baseTable);
-
-            $query->orWhere("{$alias}.{$column}", 'like', "%{$term}%");
-
-            return;
-        }
-
-        // HasOne/HasMany/BelongsToMany/Morph* — whereHas preserves SoftDeletes,
-        // global scopes, tenant scopes, and relation-level where clauses.
+        // BelongsTo/Has*/BTM/Morph* — whereHas preserves SoftDeletes, global scopes,
+        // tenant scopes, and relation-level where clauses (including withTrashed/onlyTrashed).
         $query->orWhereHas($relationName, function (Builder $relQuery) use ($column, $term): void {
             $relatedTable = $relQuery->getModel()->getTable();
             $relQuery->where("{$relatedTable}.{$column}", 'like', "%{$term}%");

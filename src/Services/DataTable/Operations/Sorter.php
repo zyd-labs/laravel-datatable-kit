@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Database\Eloquent\Relations\MorphOne;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Concerns\ResolvesRelations;
 
 final class Sorter
@@ -38,30 +38,15 @@ final class Sorter
             return;
         }
 
-        if ($relation instanceof BelongsTo) {
-            $this->ensureJoinExists($query, $relation, $relationName);
-            $baseTable = $query->getModel()->getTable();
-            $alias = $this->resolveBelongsToJoinAlias($relation, $relationName, $baseTable);
-
-            $query->orderBy("{$alias}.{$column}", $direction);
-
-            return;
-        }
-
-        if ($relation instanceof BelongsToMany) {
-            $this->orderByBelongsToMany($query, $relation, $column, $direction);
-
-            return;
-        }
-
-        if ($relation instanceof HasOne || $relation instanceof HasMany) {
-            $this->orderByHasRelation($query, $relation, $column, $direction);
-
-            return;
-        }
-
-        if ($relation instanceof MorphOne || $relation instanceof MorphMany) {
-            $this->orderByMorphRelation($query, $relation, $column, $direction);
+        if (
+            $relation instanceof BelongsTo
+            || $relation instanceof HasOne
+            || $relation instanceof HasMany
+            || $relation instanceof BelongsToMany
+            || $relation instanceof MorphOne
+            || $relation instanceof MorphMany
+        ) {
+            $this->orderByRelationColumn($query, $relationName, $column, $direction);
 
             return;
         }
@@ -69,72 +54,79 @@ final class Sorter
         $query->orderBy($field, $direction);
     }
 
-    private function orderByBelongsToMany(
+    /**
+     * Order by a related column using an Eloquent relation subquery so SoftDeletes,
+     * global scopes, and relation-level where clauses stay intact.
+     *
+     * Multi-row relations (HasMany/BelongsToMany/MorphMany) keep the historical
+     * limit(1) semantics without an explicit secondary order — the chosen related
+     * row is therefore database-dependent when multiple matches exist.
+     */
+    private function orderByRelationColumn(
         Builder $query,
-        BelongsToMany $relation,
+        string $relationName,
         string $column,
         string $direction
     ): void {
-        $pivotTable = $relation->getTable();
-        $relatedTable = $relation->getRelated()->getTable();
-        $foreignPivotKey = $relation->getForeignPivotKeyName();
-        $relatedPivotKey = $relation->getRelatedPivotKeyName();
-        $baseTable = $query->getModel()->getTable();
-        $baseKey = $query->getModel()->getKeyName();
+        $subquery = $this->relationOrderSubquery($query, $relationName, $column);
 
-        $subquery = DB::table($relatedTable)
-            ->select("{$relatedTable}.{$column}")
-            ->join($pivotTable, "{$relatedTable}.{$relatedPivotKey}", '=', "{$pivotTable}.{$relatedPivotKey}")
-            ->whereColumn("{$pivotTable}.{$foreignPivotKey}", "{$baseTable}.{$baseKey}")
-            ->limit(1);
-
-        $query->orderByRaw('('.$subquery->toSql().") {$direction}", $subquery->getBindings());
+        $query->orderBy($subquery, $direction);
     }
 
-    private function orderByHasRelation(
-        Builder $query,
-        HasOne|HasMany $relation,
-        string $column,
-        string $direction
-    ): void {
-        $relatedTable = $relation->getRelated()->getTable();
-        $foreignKey = $relation->getForeignKeyName();
-        $ownerKey = $relation->getLocalKeyName();
-        $baseTable = $query->getModel()->getTable();
+    private function relationOrderSubquery(Builder $parentQuery, string $relationName, string $column): Builder
+    {
+        /** @var Builder $subquery */
+        $subquery = Relation::noConstraints(function () use ($parentQuery, $relationName, $column): Builder {
+            $parent = $parentQuery->getModel();
+            $relation = $parent->{$relationName}();
+            $related = $relation->getRelated();
+            $relatedTable = $related->getTable();
+            $qualifiedColumn = "{$relatedTable}.{$column}";
 
-        $subquery = DB::table($relatedTable)
-            ->select($column)
-            ->whereColumn("{$relatedTable}.{$foreignKey}", "{$baseTable}.{$ownerKey}")
-            ->limit(1);
+            if ($relation instanceof BelongsTo) {
+                return $relation->getQuery()
+                    ->select($qualifiedColumn)
+                    ->whereColumn(
+                        $relation->getQualifiedOwnerKeyName(),
+                        $parent->qualifyColumn($relation->getForeignKeyName())
+                    )
+                    ->limit(1);
+            }
 
-        $query->orderByRaw('('.$subquery->toSql().") {$direction}", $subquery->getBindings());
-    }
+            if ($relation instanceof HasOne || $relation instanceof HasMany) {
+                return $relation->getQuery()
+                    ->select($qualifiedColumn)
+                    ->whereColumn(
+                        $relation->getQualifiedForeignKeyName(),
+                        $parent->qualifyColumn($relation->getLocalKeyName())
+                    )
+                    ->limit(1);
+            }
 
-    private function orderByMorphRelation(
-        Builder $query,
-        MorphOne|MorphMany $relation,
-        string $column,
-        string $direction
-    ): void {
-        $relatedTable = $relation->getRelated()->getTable();
-        $morphType = $relation->getMorphType();
-        $morphKey = $relation->getForeignKeyName();
-        $modelClass = get_class($query->getModel());
-        $baseTable = $query->getModel()->getTable();
-        $baseKey = $query->getModel()->getKeyName();
+            if ($relation instanceof MorphOne || $relation instanceof MorphMany) {
+                return $relation->getQuery()
+                    ->select($qualifiedColumn)
+                    ->whereColumn(
+                        $relation->getQualifiedForeignKeyName(),
+                        $parent->getQualifiedKeyName()
+                    )
+                    ->where($relation->getQualifiedMorphType(), $parent->getMorphClass())
+                    ->limit(1);
+            }
 
-        $subquery = DB::table($relatedTable)
-            ->select($column)
-            ->whereColumn("{$relatedTable}.{$morphKey}", "{$baseTable}.{$baseKey}")
-            ->where("{$relatedTable}.{$morphType}", $modelClass)
-            ->limit(1);
+            if ($relation instanceof BelongsToMany) {
+                return $relation->getRelationExistenceQuery(
+                    $related->newQuery(),
+                    $parentQuery,
+                    [$qualifiedColumn]
+                )->limit(1);
+            }
 
-        if (method_exists($query, 'orderBySub')) {
-            $query->orderBySub($subquery, $direction);
+            return $related->newQuery()
+                ->select($qualifiedColumn)
+                ->limit(1);
+        });
 
-            return;
-        }
-
-        $query->orderByRaw('('.$subquery->toSql().") {$direction}", $subquery->getBindings());
+        return $subquery;
     }
 }

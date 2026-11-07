@@ -22,9 +22,19 @@ class Post extends Model
         return $this->belongsTo(Author::class);
     }
 
+    public function activeAuthor(): BelongsTo
+    {
+        return $this->belongsTo(Author::class, 'author_id')->where('authors.is_active', true);
+    }
+
     public function editor(): BelongsTo
     {
         return $this->belongsTo(Author::class, 'editor_id');
+    }
+
+    public function activeEditor(): BelongsTo
+    {
+        return $this->belongsTo(Author::class, 'editor_id')->where('authors.is_active', true);
     }
 
     public function authorWithTrashed(): BelongsTo

@@ -7,6 +7,7 @@ namespace ZydLabs\LaravelDataTableKit\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
+use ZydLabs\LaravelDataTableKit\Tests\Fixtures\Models\Author;
 use ZydLabs\LaravelDataTableKit\Tests\Fixtures\Models\Employee;
 
 abstract class TestCase extends OrchestraTestCase
@@ -16,12 +17,14 @@ abstract class TestCase extends OrchestraTestCase
         parent::setUp();
 
         Employee::$tenantScopeId = 1;
+        Author::$tenantScopeId = 1;
         $this->setUpDatabase();
     }
 
     protected function tearDown(): void
     {
         Employee::$tenantScopeId = 1;
+        Author::$tenantScopeId = 1;
 
         parent::tearDown();
     }
@@ -69,7 +72,9 @@ abstract class TestCase extends OrchestraTestCase
 
         Schema::create('authors', function (Blueprint $table): void {
             $table->increments('id');
+            $table->unsignedInteger('tenant_id')->default(1);
             $table->string('name');
+            $table->boolean('is_active')->default(true);
             $table->softDeletes();
         });
 

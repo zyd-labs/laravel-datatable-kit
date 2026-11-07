@@ -459,6 +459,86 @@ final class FilterApplierRelationScopeTest extends TestCase
         $this->assertSame([(int) $this->company->id], array_map('intval', $ids));
     }
 
+    public function test_belongs_to_relation_where_excludes_inactive_authors(): void
+    {
+        $inactive = Author::query()->create([
+            'tenant_id' => 1,
+            'name' => 'Inactive Author Filter',
+            'is_active' => false,
+        ]);
+        $post = Post::query()->create([
+            'author_id' => $inactive->id,
+            'tenant_id' => 1,
+            'title' => 'Inactive Author Filter Post',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+
+        $ids = $this->filterPostIds([
+            'activeAuthor.name' => [
+                'operator' => 'and',
+                'constraints' => [
+                    ['matchMode' => 'equals', 'value' => 'Inactive Author Filter'],
+                ],
+            ],
+        ], ['activeAuthor.name']);
+
+        $this->assertSame([], $ids);
+        $this->assertDatabaseHas('posts', ['id' => $post->id]);
+    }
+
+    public function test_belongs_to_global_tenant_scope_is_preserved(): void
+    {
+        Author::$tenantScopeId = null;
+        $foreign = Author::query()->create([
+            'tenant_id' => 2,
+            'name' => 'Tenant Two Author',
+            'is_active' => true,
+        ]);
+        Author::$tenantScopeId = 1;
+
+        Post::query()->create([
+            'author_id' => $foreign->id,
+            'tenant_id' => 1,
+            'title' => 'Foreign Author Filter Post',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+
+        $ids = $this->filterPostIds([
+            'author.name' => [
+                'operator' => 'and',
+                'constraints' => [
+                    ['matchMode' => 'equals', 'value' => 'Tenant Two Author'],
+                ],
+            ],
+        ], ['author.name']);
+
+        $this->assertSame([], $ids);
+    }
+
+    public function test_belongs_to_filter_does_not_introduce_joins(): void
+    {
+        $query = Post::query()->where('posts.tenant_id', 1);
+        $this->filterApplier->apply($query, [
+            'author.name' => [
+                'operator' => 'and',
+                'constraints' => [
+                    ['matchMode' => 'contains', 'value' => 'Alive'],
+                ],
+            ],
+            'editor.name' => [
+                'operator' => 'and',
+                'constraints' => [
+                    ['matchMode' => 'contains', 'value' => 'Alive'],
+                ],
+            ],
+        ], ['author.name', 'editor.name']);
+
+        $this->assertSame([], $query->getQuery()->joins ?? []);
+        $this->assertStringContainsString('exists', strtolower($query->toSql()));
+    }
+
     /**
      * @param  array<string, array<string, mixed>>  $filters
      * @param  list<string>  $filterable

@@ -40,21 +40,6 @@ final class FilterApplier
                 continue;
             }
 
-            if (str_contains($field, '.')) {
-                [$relationName] = explode('.', $field, 2);
-                $relation = $this->getRelationInstance($query->getModel(), $relationName);
-
-                if ($relation instanceof BelongsTo) {
-                    $this->ensureJoinExists($query, $relation, $relationName);
-                }
-            }
-        }
-
-        foreach ($filters as $field => $filter) {
-            if (! in_array($field, $filterableFields, true) || $field === 'global') {
-                continue;
-            }
-
             $operator = ($filter['operator'] ?? 'and') === 'or' ? 'or' : 'and';
             $constraints = $filter['constraints'] ?? [];
 
@@ -192,13 +177,8 @@ final class FilterApplier
             return;
         }
 
-        if ($relation instanceof BelongsTo) {
-            $this->applyBelongsToFilter($query, $relation, $relationName, $column, $matchMode, $value, $method);
-
-            return;
-        }
-
-        if ($relation instanceof HasOne || $relation instanceof HasMany) {
+        // BelongsTo/Has* use whereHas so SoftDeletes, global scopes, and relation wheres are preserved.
+        if ($relation instanceof BelongsTo || $relation instanceof HasOne || $relation instanceof HasMany) {
             $this->applyHasRelationFilter($query, $relationName, $column, $matchMode, $value, $method);
 
             return;
@@ -241,23 +221,6 @@ final class FilterApplier
         $query->whereHas($relation, function (Builder $nested) use ($remaining, $matchMode, $value): void {
             $this->applyNestedRelationFilter($nested, $remaining, $matchMode, $value);
         });
-    }
-
-    private function applyBelongsToFilter(
-        Builder $query,
-        BelongsTo $relation,
-        string $relationName,
-        string $column,
-        string $matchMode,
-        mixed $value,
-        string $method
-    ): void {
-        $this->ensureJoinExists($query, $relation, $relationName);
-
-        $baseTable = $query->getModel()->getTable();
-        $alias = $this->resolveBelongsToJoinAlias($relation, $relationName, $baseTable);
-
-        $this->applyMatchMode($query, "{$alias}.{$column}", $matchMode, $value, $method);
     }
 
     private function applyHasRelationFilter(

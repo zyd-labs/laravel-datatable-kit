@@ -47,7 +47,10 @@ class GlobalSearchApplierTest extends TestCase
 
         Schema::create('authors', function (Blueprint $table): void {
             $table->id();
+            $table->unsignedInteger('tenant_id')->default(1);
             $table->string('name');
+            $table->boolean('is_active')->default(true);
+            $table->softDeletes();
         });
 
         Schema::create('articles', function (Blueprint $table): void {
@@ -61,18 +64,19 @@ class GlobalSearchApplierTest extends TestCase
         });
     }
 
-    public function test_single_level_belongs_to_search_uses_join_and_correct_column(): void
+    public function test_single_level_belongs_to_search_uses_where_has_and_correct_column(): void
     {
         $query = HealthDocument::query();
         $this->globalSearchApplier->apply($query, 'Ali', ['employee.full_name']);
 
         $sql = $query->toSql();
 
-        $this->assertStringContainsString('left join', strtolower($sql));
+        $this->assertStringContainsString('exists', strtolower($sql));
         $this->assertStringContainsString('employees', $sql);
         $this->assertStringContainsString('full_name', $sql);
         $this->assertStringContainsString('like', strtolower($sql));
         $this->assertStringNotContainsString('employees.company.name', $sql);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
     }
 
     public function test_nested_belongs_to_search_uses_where_has_chain(): void
@@ -141,15 +145,16 @@ class GlobalSearchApplierTest extends TestCase
         $this->assertStringNotContainsString('exists', strtolower($sql));
     }
 
-    public function test_belongs_to_search_uses_relation_name_alias(): void
+    public function test_belongs_to_search_uses_or_where_has(): void
     {
         $query = HealthDocument::query();
         $this->globalSearchApplier->apply($query, 'Ali', ['employee.full_name']);
 
         $sql = strtolower(str_replace('"', '', $query->toSql()));
 
-        $this->assertStringContainsString('as employee', $sql);
-        $this->assertStringContainsString('employee.full_name', $sql);
+        $this->assertStringContainsString('exists', $sql);
+        $this->assertStringContainsString('full_name', $sql);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
     }
 
     public function test_has_many_search_uses_or_where_has(): void

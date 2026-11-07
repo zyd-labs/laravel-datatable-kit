@@ -145,21 +145,24 @@ class SortApplierTest extends TestCase
         ], $query->getQuery()->orders);
     }
 
-    public function test_belongs_to_sort_uses_relation_name_alias(): void
+    public function test_belongs_to_sort_uses_relation_subquery(): void
     {
         $query = Post::query();
 
         (new Sorter)->apply($query, 'author.name', 'asc');
 
         $sql = strtolower(str_replace('"', '', $query->toSql()));
+        $orders = $query->getQuery()->orders ?? [];
 
-        $this->assertStringContainsString('as author', $sql);
-        $this->assertSame([
-            ['column' => 'author.name', 'direction' => 'asc'],
-        ], $query->getQuery()->orders);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
+        $this->assertStringContainsString('select', $sql);
+        $this->assertStringContainsString('authors', $sql);
+        $this->assertStringContainsString('author_id', $sql);
+        $this->assertNotEmpty($orders);
+        $this->assertSame('asc', $orders[0]['direction']);
     }
 
-    public function test_two_belongs_to_same_table_get_distinct_sort_aliases(): void
+    public function test_two_belongs_to_same_table_use_distinct_foreign_keys_in_sort_subqueries(): void
     {
         $query = Post::query();
         $sorter = new Sorter;
@@ -168,28 +171,28 @@ class SortApplierTest extends TestCase
         $sorter->apply($query, 'editor.name', 'desc');
 
         $sql = strtolower(str_replace('"', '', $query->toSql()));
-        $joins = $query->getQuery()->joins ?? [];
+        $orders = $query->getQuery()->orders ?? [];
 
-        $this->assertCount(2, $joins);
-        $this->assertStringContainsString('as author', $sql);
-        $this->assertStringContainsString('as editor', $sql);
-        $this->assertSame([
-            ['column' => 'author.name', 'direction' => 'asc'],
-            ['column' => 'editor.name', 'direction' => 'desc'],
-        ], $query->getQuery()->orders);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
+        $this->assertStringContainsString('author_id', $sql);
+        $this->assertStringContainsString('editor_id', $sql);
+        $this->assertCount(2, $orders);
+        $this->assertSame('asc', $orders[0]['direction']);
+        $this->assertSame('desc', $orders[1]['direction']);
     }
 
-    public function test_with_trashed_belongs_to_sort_uses_trashed_alias_suffix(): void
+    public function test_with_trashed_belongs_to_sort_subquery_omits_soft_delete_constraint(): void
     {
-        $query = Post::query();
+        $without = Post::query();
+        (new Sorter)->apply($without, 'author.name', 'asc');
 
-        (new Sorter)->apply($query, 'authorWithTrashed.name', 'desc');
+        $with = Post::query();
+        (new Sorter)->apply($with, 'authorWithTrashed.name', 'desc');
 
-        $sql = str_replace('"', '', $query->toSql());
+        $withoutSql = strtolower(str_replace('"', '', $without->toSql()));
+        $withSql = strtolower(str_replace('"', '', $with->toSql()));
 
-        $this->assertStringContainsString('__with', $sql);
-        $this->assertSame([
-            ['column' => 'authorWithTrashed__with.name', 'direction' => 'desc'],
-        ], $query->getQuery()->orders);
+        $this->assertStringContainsString('deleted_at is null', $withoutSql);
+        $this->assertStringNotContainsString('deleted_at is null', $withSql);
     }
 }

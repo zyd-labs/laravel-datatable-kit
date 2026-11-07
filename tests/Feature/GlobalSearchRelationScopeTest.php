@@ -69,7 +69,7 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $ids = $this->postIds($query);
 
         $this->assertSame([(int) $this->postAliceBob->id], $ids);
-        $this->assertJoinCount($query, 2);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
     }
 
     public function test_filter_one_belongs_to_and_sort_the_other(): void
@@ -88,10 +88,10 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $ids = $this->postIds($query);
 
         $this->assertSame([(int) $this->postAliceBob->id], $ids);
-        $this->assertStringContainsString('editor', $this->normalizeSql($query->toSql()));
+        $this->assertStringContainsString('editor_id', $this->normalizeSql($query->toSql()));
     }
 
-    public function test_global_search_uses_distinct_aliases_for_two_belongs_to_same_table(): void
+    public function test_global_search_uses_where_has_for_two_belongs_to_same_table(): void
     {
         $query = Post::query()->where('posts.tenant_id', 1);
         $this->globalSearchApplier->apply($query, 'Alice', ['author.name', 'editor.name']);
@@ -99,9 +99,8 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $sql = $this->normalizeSql($query->toSql());
         $ids = $this->postIds($query);
 
-        $this->assertStringContainsString('as author', $sql);
-        $this->assertStringContainsString('as editor', $sql);
-        $this->assertJoinCount($query, 2);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
+        $this->assertEquals(2, substr_count($sql, 'exists'));
         // Alice is author on postAliceBob, editor on postBobAlice and postTrashedEditor.
         $this->assertSame(
             [
@@ -121,7 +120,6 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $ids = $this->postIds($query);
 
         $this->assertSame([(int) $this->postTrashedEditor->id], $ids);
-        $this->assertStringContainsString('__with', $this->normalizeSql($query->toSql()));
     }
 
     public function test_global_search_only_trashed_belongs_to_matches_deleted_related_only(): void
@@ -134,7 +132,6 @@ final class GlobalSearchRelationScopeTest extends TestCase
 
         $this->assertSame([(int) $this->postTrashedEditor->id], $this->postIds($matching));
         $this->assertSame([], $this->postIds($alive));
-        $this->assertStringContainsString('__only', $this->normalizeSql($matching->toSql()));
     }
 
     public function test_normal_and_with_trashed_belongs_to_can_be_searched_together(): void
@@ -148,10 +145,10 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $ids = $this->postIds($query);
 
         $this->assertSame([(int) $this->postTrashedEditor->id], $ids);
-        $this->assertJoinCount($query, 2);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
     }
 
-    public function test_self_referencing_belongs_to_uses_relation_alias(): void
+    public function test_self_referencing_belongs_to_search_uses_where_has(): void
     {
         $manager = Employee::query()->create([
             'company_id' => $this->company->id,
@@ -177,7 +174,7 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $sql = $this->normalizeSql($query->toSql());
         $ids = $query->orderBy('employees.id')->pluck('employees.id')->map(fn ($id): int => (int) $id)->all();
 
-        $this->assertStringContainsString('as manager', $sql);
+        $this->assertStringContainsString('exists', $sql);
         $this->assertSame([(int) $report->id], $ids);
     }
 
@@ -367,7 +364,7 @@ final class GlobalSearchRelationScopeTest extends TestCase
         $this->assertSame([], $this->postIds($query));
     }
 
-    public function test_same_join_is_not_duplicated(): void
+    public function test_search_plus_filter_does_not_introduce_joins(): void
     {
         $query = Post::query()->where('posts.tenant_id', 1);
         $this->globalSearchApplier->apply($query, 'Alice', ['author.name']);
@@ -380,8 +377,55 @@ final class GlobalSearchRelationScopeTest extends TestCase
             ],
         ], ['author.name']);
 
-        $this->assertJoinCount($query, 1);
+        $this->assertSame([], $query->getQuery()->joins ?? []);
         $this->assertNotEmpty($this->postIds($query));
+    }
+
+    public function test_belongs_to_relation_where_is_preserved_in_global_search(): void
+    {
+        $inactive = Author::query()->create([
+            'tenant_id' => 1,
+            'name' => 'Inactive Unique',
+            'is_active' => false,
+        ]);
+        $post = Post::query()->create([
+            'author_id' => $inactive->id,
+            'editor_id' => $this->authorBob->id,
+            'tenant_id' => 1,
+            'title' => 'Inactive Author Post',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+
+        $query = Post::query()->where('posts.tenant_id', 1);
+        $this->globalSearchApplier->apply($query, 'Inactive Unique', ['activeAuthor.name']);
+
+        $this->assertNotContains((int) $post->id, $this->postIds($query));
+    }
+
+    public function test_belongs_to_tenant_scope_is_preserved_in_global_search(): void
+    {
+        Author::$tenantScopeId = null;
+        $foreign = Author::query()->create([
+            'tenant_id' => 2,
+            'name' => 'Foreign Author Hit',
+            'is_active' => true,
+        ]);
+        Author::$tenantScopeId = 1;
+
+        $post = Post::query()->create([
+            'author_id' => $foreign->id,
+            'editor_id' => null,
+            'tenant_id' => 1,
+            'title' => 'Foreign Author Post',
+            'views' => 1,
+            'status' => 'published',
+        ]);
+
+        $query = Post::query()->where('posts.tenant_id', 1);
+        $this->globalSearchApplier->apply($query, 'Foreign Author Hit', ['author.name']);
+
+        $this->assertNotContains((int) $post->id, $this->postIds($query));
     }
 
     public function test_global_search_plus_filter_plus_sort_and_pagination(): void
@@ -437,11 +481,6 @@ final class GlobalSearchRelationScopeTest extends TestCase
     private function companyIds($query): array
     {
         return $query->orderBy('companies.id')->pluck('companies.id')->map(fn ($id): int => (int) $id)->all();
-    }
-
-    private function assertJoinCount($query, int $expected): void
-    {
-        $this->assertCount($expected, $query->getQuery()->joins ?? []);
     }
 
     private function normalizeSql(string $sql): string
