@@ -9,8 +9,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\MorphMany;
-use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Support\Facades\DB;
 use ZydLabs\LaravelDataTableKit\Services\DataTable\Operations\Concerns\ResolvesRelations;
 
@@ -201,7 +199,7 @@ final class FilterApplier
         }
 
         if ($relation instanceof HasOne || $relation instanceof HasMany) {
-            $this->applyHasRelationFilter($query, $relation, $column, $matchMode, $value, $method);
+            $this->applyHasRelationFilter($query, $relationName, $column, $matchMode, $value, $method);
 
             return;
         }
@@ -212,16 +210,8 @@ final class FilterApplier
             return;
         }
 
-        if ($relation instanceof MorphOne || $relation instanceof MorphMany) {
-            $hasMethod = $method === 'orWhere' ? 'orWhereHasMorph' : 'whereHasMorph';
-            $query->{$hasMethod}($relationName, '*', function (Builder $relQuery) use ($column, $matchMode, $value): void {
-                $relatedTable = $relQuery->getModel()->getTable();
-                $this->applyMatchMode($relQuery, "{$relatedTable}.{$column}", $matchMode, $value, 'where');
-            });
-
-            return;
-        }
-
+        // MorphOne/MorphMany are filtered from the parent side — whereHas already applies
+        // morph type/id constraints from the relation definition. whereHasMorph('*') is for morphTo.
         $hasMethod = $method === 'orWhere' ? 'orWhereHas' : 'whereHas';
         $query->{$hasMethod}($relationName, function (Builder $relQuery) use ($column, $matchMode, $value): void {
             $relatedTable = $relQuery->getModel()->getTable();
@@ -265,38 +255,26 @@ final class FilterApplier
         $this->ensureJoinExists($query, $relation, $relationName);
 
         $baseTable = $query->getModel()->getTable();
-        $alias = $this->getJoinAlias($relation, $relationName, $baseTable);
+        $trashedMode = $this->resolveBelongsToTrashedMode($relation);
+        $alias = $this->getJoinAlias($relation, $relationName, $baseTable, $trashedMode);
 
         $this->applyMatchMode($query, "{$alias}.{$column}", $matchMode, $value, $method);
     }
 
     private function applyHasRelationFilter(
         Builder $query,
-        HasOne|HasMany $relation,
+        string $relationName,
         string $column,
         string $matchMode,
         mixed $value,
         string $method
     ): void {
-        $model = $query->getModel();
-        $relatedTable = $relation->getRelated()->getTable();
-        $foreignKey = $relation->getForeignKeyName();
-        $localKey = $relation->getLocalKeyName();
-        $baseTable = $model->getTable();
-        $existsMethod = $method === 'orWhere' ? 'orWhereExists' : 'whereExists';
+        // whereHas preserves SoftDeletes, global scopes, and relation-level where clauses.
+        $hasMethod = $method === 'orWhere' ? 'orWhereHas' : 'whereHas';
 
-        $query->{$existsMethod}(function ($subQuery) use ($relatedTable, $baseTable, $foreignKey, $localKey, $column, $matchMode, $value): void {
-            $subQuery->select(DB::raw('1'))
-                ->from($relatedTable)
-                ->whereColumn("{$relatedTable}.{$foreignKey}", "{$baseTable}.{$localKey}");
-
-            $this->applyMatchModeOnQueryBuilder(
-                $subQuery,
-                "{$relatedTable}.{$column}",
-                $matchMode,
-                $value,
-                'where'
-            );
+        $query->{$hasMethod}($relationName, function (Builder $relQuery) use ($column, $matchMode, $value): void {
+            $relatedTable = $relQuery->getModel()->getTable();
+            $this->applyMatchMode($relQuery, "{$relatedTable}.{$column}", $matchMode, $value, 'where');
         });
     }
 
@@ -330,51 +308,11 @@ final class FilterApplier
         }
 
         $operator = $this->getCountOperator($matchMode);
-
-        if ($relation instanceof HasOne || $relation instanceof HasMany) {
-            $relatedTable = $relation->getRelated()->getTable();
-            $foreignKey = $relation->getForeignKeyName();
-            $localKey = $relation->getLocalKeyName();
-            $baseTable = $query->getModel()->getTable();
-
-            $query->{$method}(function (Builder $where) use ($relatedTable, $baseTable, $foreignKey, $localKey, $operator, $value): void {
-                $raw = "(SELECT COUNT(*) FROM `{$relatedTable}` WHERE `{$relatedTable}`.`{$foreignKey}` = `{$baseTable}`.`{$localKey}`) {$operator} ?";
-                $where->whereRaw(DB::raw($raw), [$value]);
-            });
-
-            return;
-        }
-
-        if ($relation instanceof BelongsTo) {
-            $relatedTable = $relation->getRelated()->getTable();
-            $foreignKey = $relation->getForeignKeyName();
-            $ownerKey = $relation->getOwnerKeyName();
-            $baseTable = $query->getModel()->getTable();
-
-            $query->{$method}(function (Builder $where) use ($relatedTable, $baseTable, $foreignKey, $ownerKey, $operator, $value): void {
-                $raw = "(SELECT COUNT(*) FROM `{$relatedTable}` WHERE `{$relatedTable}`.`{$ownerKey}` = `{$baseTable}`.`{$foreignKey}`) {$operator} ?";
-                $where->whereRaw(DB::raw($raw), [$value]);
-            });
-
-            return;
-        }
-
-        if ($relation instanceof BelongsToMany) {
-            $pivotTable = $relation->getTable();
-            $foreignPivotKey = $relation->getForeignPivotKeyName();
-            $parentKey = $relation->getParent()->getKeyName();
-            $baseTable = $query->getModel()->getTable();
-
-            $query->{$method}(function (Builder $where) use ($pivotTable, $baseTable, $foreignPivotKey, $parentKey, $operator, $value): void {
-                $raw = "(SELECT COUNT(*) FROM `{$pivotTable}` WHERE `{$pivotTable}`.`{$foreignPivotKey}` = `{$baseTable}`.`{$parentKey}`) {$operator} ?";
-                $where->whereRaw(DB::raw($raw), [$value]);
-            });
-
-            return;
-        }
-
+        $count = is_numeric($value) ? $value + 0 : 0;
         $hasMethod = $method === 'orWhere' ? 'orWhereHas' : 'whereHas';
-        $query->{$hasMethod}($relationName, function (): void {}, $operator, $value);
+
+        // whereHas preserves SoftDeletes, global scopes, morph type constraints, and relation wheres.
+        $query->{$hasMethod}($relationName, function (): void {}, $operator, $count);
     }
 
     private function applyMatchMode(

@@ -35,6 +35,8 @@ class GlobalSearchApplierTest extends TestCase
             $table->id();
             $table->string('full_name');
             $table->foreignId('company_id')->constrained();
+            $table->unsignedInteger('tenant_id')->default(1);
+            $table->softDeletes();
         });
 
         Schema::create('health_documents', function (Blueprint $table): void {

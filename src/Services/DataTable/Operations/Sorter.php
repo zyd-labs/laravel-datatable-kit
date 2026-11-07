@@ -40,9 +40,9 @@ final class Sorter
 
         if ($relation instanceof BelongsTo) {
             $this->ensureJoinExists($query, $relation, $relationName);
-            $relatedTable = $relation->getRelated()->getTable();
             $baseTable = $query->getModel()->getTable();
-            $alias = $relatedTable === $baseTable ? sprintf('%s_%s', $relationName, $relatedTable) : $relatedTable;
+            $trashedMode = $this->resolveBelongsToTrashedMode($relation);
+            $alias = $this->getJoinAlias($relation, $relationName, $baseTable, $trashedMode);
 
             $query->orderBy("{$alias}.{$column}", $direction);
 

@@ -7,6 +7,7 @@ namespace ZydLabs\LaravelDataTableKit\Tests;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
+use ZydLabs\LaravelDataTableKit\Tests\Fixtures\Models\Employee;
 
 abstract class TestCase extends OrchestraTestCase
 {
@@ -14,7 +15,15 @@ abstract class TestCase extends OrchestraTestCase
     {
         parent::setUp();
 
+        Employee::$tenantScopeId = 1;
         $this->setUpDatabase();
+    }
+
+    protected function tearDown(): void
+    {
+        Employee::$tenantScopeId = 1;
+
+        parent::tearDown();
     }
 
     protected function getEnvironmentSetUp($app): void
@@ -29,11 +38,13 @@ abstract class TestCase extends OrchestraTestCase
 
     protected function setUpDatabase(): void
     {
+        Schema::dropIfExists('comments');
         Schema::dropIfExists('post_tag');
         Schema::dropIfExists('tags');
         Schema::dropIfExists('health_documents');
         Schema::dropIfExists('posts');
         Schema::dropIfExists('authors');
+        Schema::dropIfExists('legacy_authors');
         Schema::dropIfExists('employees');
         Schema::dropIfExists('companies');
 
@@ -46,10 +57,13 @@ abstract class TestCase extends OrchestraTestCase
         Schema::create('employees', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('company_id')->nullable();
+            $table->unsignedInteger('tenant_id')->default(1);
             $table->string('name');
             $table->decimal('salary', 10, 2)->nullable();
             $table->string('status')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->date('hired_on')->nullable();
+            $table->softDeletes();
         });
 
         Schema::create('authors', function (Blueprint $table): void {
@@ -58,9 +72,16 @@ abstract class TestCase extends OrchestraTestCase
             $table->softDeletes();
         });
 
+        Schema::create('legacy_authors', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('name');
+            $table->timestamp('removed_at')->nullable();
+        });
+
         Schema::create('posts', function (Blueprint $table): void {
             $table->increments('id');
             $table->unsignedInteger('author_id')->nullable();
+            $table->unsignedInteger('legacy_author_id')->nullable();
             $table->unsignedInteger('tenant_id')->default(1);
             $table->string('title');
             $table->integer('views')->nullable();
@@ -73,6 +94,7 @@ abstract class TestCase extends OrchestraTestCase
             $table->increments('id');
             $table->string('name');
             $table->date('tagged_on')->nullable();
+            $table->softDeletes();
         });
 
         Schema::create('post_tag', function (Blueprint $table): void {
@@ -86,6 +108,13 @@ abstract class TestCase extends OrchestraTestCase
             $table->unsignedInteger('employee_id');
             $table->string('label');
             $table->integer('score')->nullable();
+        });
+
+        Schema::create('comments', function (Blueprint $table): void {
+            $table->increments('id');
+            $table->string('body');
+            $table->nullableMorphs('commentable');
+            $table->softDeletes();
         });
     }
 }
